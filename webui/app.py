@@ -156,7 +156,10 @@ def display_text_to_image():
                 prompt=[prompt] * num_outputs,
                 negative_prompt=[negative_prompt] * num_outputs,
                 num_inference_steps=num_inference_steps,
+                image_height=image_height,
+                image_width=image_width,
                 guidance_scale=guidance_scale,
+                guidance_rescale=guidance_rescale,
                 return_latent_history=generate_video,
             )
 
@@ -167,7 +170,7 @@ def display_text_to_image():
                     timestep_images.append(img)
 
                 path = "text_to_image_diffusion.mp4"
-                pil_to_video(timestep_images, path, fps=5)
+                pil_to_video(timestep_images, path, fps=fps)
                 st.video(open(path, "rb").read())
             else:
                 images = image_grid(images, rows=1, cols=num_outputs)
