@@ -149,7 +149,7 @@ def display_image_gen():
         )
 
     if st.button("Generate"):
-        with st.spinner("Generating image..."):
+        with st.spinner("Generating..."):
             if start_image:
                 model = ImageToImageDiffusion(model_id=model_id)
                 start_image = [Image.open(start_image)] * num_images
@@ -207,11 +207,192 @@ def display_video_gen():
 
 
 def display_latent_walk():
-    ...
+    import numpy as np
+    import torch
+
+    from IPython.display import Video, display
+    from PIL import Image
+    from stablefused import LatentWalkDiffusion, TextToImageDiffusion
+    from stablefused.utils import image_grid, pil_to_video
+
+    model_id = st.selectbox(
+        label="Select model",
+        options=[
+            "runwayml/stable-diffusion-v1-5",
+            "CompVis/stable-diffusion-v1-4",
+            "stabilityai/stable-diffusion-2-1-base",
+        ],
+    )
+
+    prompt = st.text_input(
+        label="Prompt",
+        value="A painting of a cat",
+    )
+
+    negative_prompt = st.text_input(
+        label="Negative Prompt",
+        value="cartoon, unrealistic, blur, boring background, deformed, disfigured, low resolution, unattractive",
+    )
+
+    image_height = st.number_input(
+        label="Image Height",
+        min_value=16,
+        max_value=4096,
+        value=512,
+        step=8,
+        key="image_height",
+        format="%d",
+    )
+
+    image_width = st.number_input(
+        label="Image Width",
+        min_value=16,
+        max_value=4096,
+        value=512,
+        step=8,
+        key="image_width",
+    )
+
+    num_images = st.number_input(
+        label="Number of Output Images",
+        min_value=1,
+        max_value=10,
+        value=1,
+        step=1,
+        key="num_images",
+    )
+
+    num_inference_steps = st.number_input(
+        label="Number of Inference Steps",
+        min_value=1,
+        max_value=100,
+        value=20,
+        step=1,
+        key="num_inference_steps",
+    )
+
+    guidance_scale = st.number_input(
+        label="Guidance Scale",
+        min_value=0.0,
+        max_value=50.0,
+        value=7.5,
+        step=0.1,
+        key="guidance_scale",
+    )
+
+    seed = st.number_input(
+        label="Seed",
+        min_value=0,
+        max_value=2**32,
+        value=1337,
+        step=1,
+        key="seed",
+        format="%d",
+    )
+
+    interpolation_steps = st.number_input(
+        label="Interpolation Steps",
+        min_value=1,
+        max_value=100,
+        value=24,
+        step=1,
+        key="interpolation_steps",
+    )
+
+    fps = st.number_input(
+        label="FPS",
+        min_value=1,
+        max_value=60,
+        value=5,
+        step=1,
+        key="fps",
+        format="%d",
+    )
+
+    if "story" not in st.session_state:
+        st.session_state.story = []
+
+    story_prompt = st.text_input(
+        label="Story Prompt",
+        value="",
+    )
+
+    col1, col2, col3 = st.columns(3)
+    if col1.button("Add Prompt"):
+        st.session_state.story.append(story_prompt)
+
+    if col2.button("Clear Story"):
+        st.session_state.story = []
+
+    if col3.button("Use Sample Story"):
+        st.session_state.story = [
+            "A dog chasing a cat in a thrilling backyard scene, high quality and photorealistic",
+            "A determined dog in hot pursuit, with stunning realism, octane render",
+            "A thrilling chase, dog behind the cat, octane render, exceptional realism and quality",
+            "The exciting moment of a cat outmaneuvering a chasing dog, high-quality and photorealistic detail",
+            "A clever cat escaping a determined dog and soaring into space, rendered with octane render for stunning realism",
+            "The cat's escape into the cosmos, leaving the dog behind in a scene,high quality and photorealistic style",
+        ]
+    st.write(st.session_state.story)
+
+    if st.button("Generate"):
+        with st.spinner("Generating..."):
+            lw_model = LatentWalkDiffusion(model_id=model_id)
+
+            lw_model.enable_attention_slicing()
+            lw_model.enable_slicing()
+            lw_model.enable_tiling()
+
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+
+            # t2i_model = TextToImageDiffusion(
+            #     model_id=model_id, torch_dtype=torch.float16
+            # )
+
+            shape = (
+                1,
+                lw_model.unet.config.in_channels,
+                image_height // lw_model.vae_scale_factor,
+                image_width // lw_model.vae_scale_factor,
+            )
+            single_latent = lw_model.random_tensor(shape)
+            latent = single_latent.repeat(num_images, 1, 1, 1)
+
+            # t2i_images = t2i_model(
+            #     prompt=story_prompt,
+            #     num_inference_steps=20,
+            #     guidance_scale=15.0,
+            #     latent=latent,
+            # )
+
+            story = st.session_state.story
+            story_images = []
+            for i in range(len(story) - 1):
+                current_prompt = story[i : i + 2]
+                current_latent = latent[i : i + 2]
+                imgs = lw_model.interpolate(
+                    prompt=current_prompt,
+                    negative_prompt=[negative_prompt] * len(current_prompt),
+                    latent=current_latent,
+                    num_inference_steps=num_inference_steps,
+                    interpolation_steps=interpolation_steps,
+                )
+                story_images.extend(imgs)
+
+            path = "diffusion_story.mp4"
+            pil_to_video(story_images, path, fps=fps)
+
+            st.video(open(path, "rb").read())
 
 
 def display_inpaint():
-    ...
+    start_image = st.file_uploader(
+        label="Start Image",
+        type=["png", "jpg", "jpeg"],
+    )
+
+
 
 
 def display_inpaint_walk():
