@@ -1,10 +1,20 @@
-import random
+import numpy as np
 import streamlit as st
+import torch
+
+from PIL import Image
+from streamlit_drawable_canvas import st_canvas
 from streamlit_option_menu import option_menu
 from streamlit_tags import st_tags
-
 from diffusers import DPMSolverMultistepScheduler
 
+from stablefused.utils import image_grid, pil_to_video
+from stablefused import (
+    ImageToImageDiffusion,
+    LatentWalkDiffusion,
+    TextToImageDiffusion,
+    InpaintDiffusion,
+)
 
 page_config = st.set_page_config(
     page_title="Stablefused",
@@ -35,13 +45,6 @@ current_tab = option_menu(
 
 
 def display_image_gen():
-    import numpy as np
-    import torch
-
-    from PIL import Image
-    from stablefused import TextToImageDiffusion, ImageToImageDiffusion
-    from stablefused.utils import image_grid, pil_to_video
-
     model_id = st.selectbox(
         label="Select model",
         options=[
@@ -207,14 +210,6 @@ def display_video_gen():
 
 
 def display_latent_walk():
-    import numpy as np
-    import torch
-
-    from IPython.display import Video, display
-    from PIL import Image
-    from stablefused import LatentWalkDiffusion, TextToImageDiffusion
-    from stablefused.utils import image_grid, pil_to_video
-
     model_id = st.selectbox(
         label="Select model",
         options=[
@@ -387,12 +382,85 @@ def display_latent_walk():
 
 
 def display_inpaint():
-    start_image = st.file_uploader(
-        label="Start Image",
-        type=["png", "jpg", "jpeg"],
+    drawing_mode = st.sidebar.selectbox(
+        "Drawing tool:", ("point", "freedraw", "line", "rect", "circle", "transform")
     )
 
+    stroke_width = st.sidebar.slider("Stroke width: ", 1, 25, 3)
+    if drawing_mode == "point":
+        point_display_radius = st.sidebar.slider("Point display radius: ", 1, 25, 3)
+    start_image = st.sidebar.file_uploader("Start image:", type=["png", "jpg"])
 
+    prompt = st.text_input(
+        label="Prompt",
+        value="A painting of a cat",
+    )
+
+    negative_prompt = st.text_input(
+        label="Negative Prompt",
+        value="cartoon, unrealistic, blur, boring background, deformed, disfigured, low resolution, unattractive",
+    )
+
+    num_images = st.number_input(
+        label="Number of Output Images",
+        min_value=1,
+        max_value=10,
+        value=1,
+        step=1,
+        key="num_images",
+    )
+
+    canvas_result = st_canvas(
+        # Fixed fill color with some opacity
+        fill_color="rgba(255, 165, 0, 0.3)",
+        stroke_width=stroke_width,
+        stroke_color="white",
+        background_image=Image.open(start_image) if start_image else None,
+        update_streamlit=True,
+        drawing_mode=drawing_mode,
+        point_display_radius=point_display_radius if drawing_mode == "point" else 0,
+        key="canvas",
+    )
+
+    if st.button("Generate"):
+        if canvas_result.image_data is None:
+            mask = np.zeros((512, 512))
+            mask = Image.fromarray(mask).convert("L")
+        else:
+            mask = Image.fromarray(canvas_result.image_data).convert("L")
+            mask = np.array(mask)
+            mask[mask > 0] = 255
+            mask = Image.fromarray(mask)
+
+        st.write(np.array(mask))
+        st.image(mask, clamp=True)
+
+        start_image = Image.open(start_image).convert("RGB")
+        start_image = np.array(start_image)
+        start_image = Image.fromarray(start_image)
+        st.image(start_image)
+
+        model = InpaintDiffusion(
+            model_id="runwayml/stable-diffusion-inpainting", torch_dtype=torch.float16
+        )
+        model.enable_attention_slicing()
+        model.enable_slicing()
+        model.enable_tiling()
+
+        images = model(
+            prompt=[prompt] * num_images,
+            negative_prompt=[negative_prompt] * num_images,
+            image=start_image,
+            mask=mask,
+            num_inference_steps=2,
+            start_step=0,
+            image_height=512,
+            image_width=512,
+            guidance_scale=10.0,
+        )
+
+        images = image_grid(images, rows=1, cols=num_images)
+        st.image(images, clamp=True)
 
 
 def display_inpaint_walk():
