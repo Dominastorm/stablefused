@@ -21,25 +21,25 @@ current_tab = option_menu(
     menu_title="Stablefused",
     menu_icon="box",
     options=[
-        "Text to Image",
-        "Image to Image",
+        "Image Gen",
+        "Video Gen",
         "Latent Walk",
         "Inpaint",
         "Inpaint Walk",
     ],
     # icons from https://icons.getbootstrap.com/
-    icons=["fonts", "card-image", "arrows-move", "brush", "palette"],
+    icons=["card-image", "film", "arrows-move", "brush", "palette"],
     default_index=0,
     orientation=orientation,
 )
 
 
-def display_text_to_image():
+def display_image_gen():
     import numpy as np
     import torch
 
-    from IPython.display import Video, display
-    from stablefused import TextToImageDiffusion
+    from PIL import Image
+    from stablefused import TextToImageDiffusion, ImageToImageDiffusion
     from stablefused.utils import image_grid, pil_to_video
 
     model_id = st.selectbox(
@@ -61,6 +61,11 @@ def display_text_to_image():
         value="cartoon, unrealistic, blur, boring background, deformed, disfigured, low resolution, unattractive",
     )
 
+    start_image = st.file_uploader(
+        label="Start Image",
+        type=["png", "jpg", "jpeg"],
+    )
+
     image_height = st.number_input(
         label="Image Height",
         min_value=16,
@@ -80,13 +85,13 @@ def display_text_to_image():
         key="image_width",
     )
 
-    num_outputs = st.number_input(
+    num_images = st.number_input(
         label="Number of Output Images",
         min_value=1,
         max_value=10,
         value=1,
         step=1,
-        key="num_outputs",
+        key="num_images",
     )
 
     num_inference_steps = st.number_input(
@@ -137,14 +142,23 @@ def display_text_to_image():
             label="FPS",
             min_value=1,
             max_value=60,
-            format="%d"
+            value=5,
+            step=1,
+            key="fps",
+            format="%d",
         )
 
-    
     if st.button("Generate"):
         with st.spinner("Generating image..."):
-            model = TextToImageDiffusion(model_id=model_id)
-            model.scheduler = DPMSolverMultistepScheduler.from_config(model.scheduler.config)
+            if start_image:
+                model = ImageToImageDiffusion(model_id=model_id)
+                start_image = [Image.open(start_image)] * num_images
+            else:
+                model = TextToImageDiffusion(model_id=model_id)
+
+            model.scheduler = DPMSolverMultistepScheduler.from_config(
+                model.scheduler.config
+            )
             model.enable_attention_slicing()
             model.enable_slicing()
             model.enable_tiling()
@@ -152,31 +166,43 @@ def display_text_to_image():
             torch.manual_seed(seed)
             np.random.seed(seed)
 
-            images = model(
-                prompt=[prompt] * num_outputs,
-                negative_prompt=[negative_prompt] * num_outputs,
-                num_inference_steps=num_inference_steps,
-                image_height=image_height,
-                image_width=image_width,
-                guidance_scale=guidance_scale,
-                guidance_rescale=guidance_rescale,
-                return_latent_history=generate_video,
-            )
+            if start_image:
+                images = model(
+                    image=start_image,
+                    prompt=[prompt] * num_images,
+                    negative_prompt=[negative_prompt] * num_images,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale,
+                    guidance_rescale=guidance_rescale,
+                    return_latent_history=generate_video,
+                )
+            else:
+                images = model(
+                    prompt=[prompt] * num_images,
+                    negative_prompt=[negative_prompt] * num_images,
+                    num_inference_steps=num_inference_steps,
+                    image_height=image_height,
+                    image_width=image_width,
+                    guidance_scale=guidance_scale,
+                    guidance_rescale=guidance_rescale,
+                    return_latent_history=generate_video,
+                )
 
             if generate_video:
                 timestep_images = []
                 for imgs in zip(*images):
-                    img = image_grid(imgs, rows=1, cols=num_outputs)
+                    img = image_grid(imgs, rows=1, cols=num_images)
                     timestep_images.append(img)
 
-                path = "text_to_image_diffusion.mp4"
+                path = "diffusion_latent_history.mp4"
                 pil_to_video(timestep_images, path, fps=fps)
                 st.video(open(path, "rb").read())
             else:
-                images = image_grid(images, rows=1, cols=num_outputs)
+                images = image_grid(images, rows=1, cols=num_images)
                 st.image(images, clamp=True)
 
-def display_image_to_image():
+
+def display_video_gen():
     ...
 
 
@@ -194,10 +220,10 @@ def display_inpaint_walk():
 
 def display_page():
     match current_tab:
-        case "Text to Image":
-            display_text_to_image()
-        case "Image to Image":
-            display_image_to_image()
+        case "Image Gen":
+            display_image_gen()
+        case "Video Gen":
+            display_video_gen()
         case "Latent Walk":
             display_latent_walk()
         case "Inpaint":
