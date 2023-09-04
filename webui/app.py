@@ -299,7 +299,7 @@ def display_latent_walk():
         label="Interpolation Steps",
         min_value=1,
         max_value=100,
-        value=24,
+        value=5,
         step=1,
         key="interpolation_steps",
     )
@@ -351,25 +351,15 @@ def display_latent_walk():
             torch.manual_seed(seed)
             np.random.seed(seed)
 
-            # t2i_model = TextToImageDiffusion(
-            #     model_id=model_id, torch_dtype=torch.float16
-            # )
-
+            image_height = 512
+            image_width = 512
             shape = (
-                1,
+                len(st.session_state.story),
                 lw_model.unet.config.in_channels,
                 image_height // lw_model.vae_scale_factor,
                 image_width // lw_model.vae_scale_factor,
             )
-            single_latent = lw_model.random_tensor(shape)
-            latent = single_latent.repeat(num_images, 1, 1, 1)
-
-            # t2i_images = t2i_model(
-            #     prompt=story_prompt,
-            #     num_inference_steps=20,
-            #     guidance_scale=15.0,
-            #     latent=latent,
-            # )
+            latent = lw_model.random_tensor(shape)
 
             story = st.session_state.story
             story_images = []
