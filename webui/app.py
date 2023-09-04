@@ -152,6 +152,7 @@ def display_image_gen():
         )
 
     if st.button("Generate"):
+        import time
         with st.spinner("Generating..."):
             if start_image:
                 model = ImageToImageDiffusion(model_id=model_id)
@@ -159,6 +160,7 @@ def display_image_gen():
             else:
                 model = TextToImageDiffusion(model_id=model_id)
 
+            model.to("cuda")
             model.scheduler = DPMSolverMultistepScheduler.from_config(
                 model.scheduler.config
             )
@@ -204,6 +206,14 @@ def display_image_gen():
                 images = image_grid(images, rows=1, cols=num_images)
                 st.image(images, clamp=True)
 
+            model.to("cpu")
+            del model
+            model = None
+            torch.cuda.empty_cache()
+            with torch.no_grad():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
 
 def display_video_gen():
     ...
@@ -382,14 +392,9 @@ def display_latent_walk():
 
 
 def display_inpaint():
-    drawing_mode = st.sidebar.selectbox(
-        "Drawing tool:", ("point", "freedraw", "line", "rect", "circle", "transform")
-    )
+    drawing_mode = "rect"
 
-    stroke_width = st.sidebar.slider("Stroke width: ", 1, 25, 3)
-    if drawing_mode == "point":
-        point_display_radius = st.sidebar.slider("Point display radius: ", 1, 25, 3)
-    start_image = st.sidebar.file_uploader("Start image:", type=["png", "jpg"])
+    start_image = st.file_uploader("Start image:", type=["png", "jpg"])
 
     prompt = st.text_input(
         label="Prompt",
@@ -412,13 +417,12 @@ def display_inpaint():
 
     canvas_result = st_canvas(
         # Fixed fill color with some opacity
-        fill_color="rgba(255, 165, 0, 0.3)",
-        stroke_width=stroke_width,
+        fill_color="rgba(255, 255, 255, 0.3)",
         stroke_color="white",
         background_image=Image.open(start_image) if start_image else None,
         update_streamlit=True,
+        stroke_width=3,
         drawing_mode=drawing_mode,
-        point_display_radius=point_display_radius if drawing_mode == "point" else 0,
         key="canvas",
     )
 
@@ -432,7 +436,6 @@ def display_inpaint():
             mask[mask > 0] = 255
             mask = Image.fromarray(mask)
 
-        st.write(np.array(mask))
         st.image(mask, clamp=True)
 
         start_image = Image.open(start_image).convert("RGB")
@@ -441,7 +444,7 @@ def display_inpaint():
         st.image(start_image)
 
         model = InpaintDiffusion(
-            model_id="runwayml/stable-diffusion-inpainting", torch_dtype=torch.float16
+            model_id="runwayml/stable-diffusion-inpainting"
         )
         model.enable_attention_slicing()
         model.enable_slicing()
@@ -452,7 +455,7 @@ def display_inpaint():
             negative_prompt=[negative_prompt] * num_images,
             image=start_image,
             mask=mask,
-            num_inference_steps=2,
+            num_inference_steps=20,
             start_step=0,
             image_height=512,
             image_width=512,
@@ -464,6 +467,10 @@ def display_inpaint():
 
 
 def display_inpaint_walk():
+    ...
+
+
+def display_infinite_zoom():
     ...
 
 
@@ -479,6 +486,8 @@ def display_page():
             display_inpaint()
         case "Inpaint Walk":
             display_inpaint_walk()
+        case "Infinte Zoom":
+            display_infinite_zoom()
 
 
 display_page()
