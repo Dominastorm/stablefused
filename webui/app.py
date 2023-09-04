@@ -108,7 +108,7 @@ def display_image_gen():
 
     guidance_scale = st.number_input(
         label="Guidance Scale",
-        min_value=0.0,
+        min_value=-50.0,
         max_value=50.0,
         value=7.5,
         step=0.1,
@@ -268,7 +268,7 @@ def display_latent_walk():
 
     guidance_scale = st.number_input(
         label="Guidance Scale",
-        min_value=0.0,
+        min_value=-50.0,
         max_value=50.0,
         value=7.5,
         step=0.1,
